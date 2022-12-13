@@ -1,10 +1,11 @@
 from ..constants.point_types import PointTypes
-from .coordinates import Coordinates
 
-class Point(Coordinates):
+class Point:
 
-    def __init__(self, coords: tuple[int, int], type: PointTypes) -> None:
-        super().__init__(coords)
-        
+    __slots__ =  ['X', 'Y', 'type', 'distance']
+
+    def __init__(self, x: int, y: int, type: PointTypes) -> None:
+        self.X = x
+        self.Y = y
         self.type = type
         self.distance = -1

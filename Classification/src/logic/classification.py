@@ -1,82 +1,86 @@
 from ..constants.initial_points import all_initial_points
 from ..constants.point_types import PointTypes
+from ..constants import labels
 from ..models.point import Point
+from .output_creator import OutputCreator
 from .miscellaneous import Misc
 
-import math
+from timeit import default_timer as timer
+from math import sqrt
+import copy
 
 class Classification:
 
     def __init__(self) -> None:
-        self.map = [[None for _ in range(10000)] for _ in range(10000)]
+        self.output_creator = OutputCreator()
 
-        self.recorded_values = list()
+        self.map = [[False for _ in range(10000)] for _ in range(10000)]
+        self.num_of_neighbors = [1, 3, 7, 15]
 
-        self.red_point_coords_x = list()
-        self.red_point_coords_y = list()
+        self.generated_values = list()
+        self.initial_values = list()
 
-        self.blue_point_coords_x = list()
-        self.blue_point_coords_y = list()
+    def reset_lists(self) -> None:
+        self.point_coords = {
+            labels.RED_X: list(),
+            labels.RED_Y: list(),
+            labels.BLUE_X: list(),
+            labels.BLUE_Y: list(),
+            labels.GREEN_X: list(),
+            labels.GREEN_Y: list(),
+            labels.PURPLE_X: list(),
+            labels.PURPLE_Y: list(),
+        }
+        self.current_values = copy.deepcopy(self.initial_values)
+        
+        self.total_num_of_points = 1
+        self.guessed_num_of_points = 1
 
-        self.green_point_coords_x = list()
-        self.green_point_coords_y = list()
-
-        self.purple_point_coords_x = list()
-        self.purple_point_coords_y = list()
-
-        self.total_num_of_points = 0
-        self.guessed_num_of_points = 0
-
-        self.counter = 0
-
-    def generate_initial_points(self) -> list:
+    def generate_initial_points(self) -> None:
         for point_type, collection in all_initial_points():
             for X, Y in collection:
                 X += 5000
                 Y += 5000
+                
+                self.map[Y][X] = True
+                self.initial_values.append(Point(X, Y, point_type))
 
-                init_point = Point((X, Y), point_type)
-
-                self.map[Y][X] = init_point
-                self.recorded_values.append(init_point)
-
-    def generate_new_points(self, neighbors: int) -> None:
-        for index in range(0, 5000):
+    def generate_new_points(self) -> None:
+        for index in range(0, 1000):
             point_type = PointTypes.get_point_types()[index % 4]
 
             X, Y = self.generate_coords(point_type)
 
-            found_point_type = self.classify((X, Y), neighbors)
+            self.map[Y][X] = True
+            self.generated_values.append(Point(X, Y, point_type))
 
-            new_point = Point((X, Y), found_point_type)
+    def perform_classification(self) -> None:
+        for neighbor in self.num_of_neighbors:
+            self.reset_lists()
+            start = timer()
 
-            self.map[Y][X] = new_point
-            self.recorded_values.append(new_point)
+            append = self.current_values.append
 
-            self.compare_results(point_type, found_point_type)
-            print(self.counter)
-            self.counter += 1
+            for point in self.generated_values:
+                found_point_type = self.classify(point.X, point.Y, neighbor)
 
-    def classify(self, coords: tuple[int, int], neighbors: int) -> PointTypes:
-        X, Y = coords
-        
-        def sort_func(point: Point) -> float:
-            return point.distance
+                append(Point(point.X, point.Y, found_point_type))
 
-        for point in self.recorded_values:
-            point_x, point_y = point.get_coords()
+                if point.type == found_point_type:
+                    self.guessed_num_of_points += 1
 
-            point.distance = math.sqrt((point_x - X) ** 2 + (point_y - Y) ** 2)
+                self.total_num_of_points += 1
 
-        self.recorded_values.sort(key = sort_func)
+            end = timer()
+            self.generate_graph_data(neighbor, round(end - start, 2))
 
-        return Misc.get_point_type(self.recorded_values[: neighbors])
+    def classify(self, x: int, y: int, neighbors: int) -> PointTypes:
+        for point in self.current_values:
+            point.distance = sqrt((point.X - x) ** 2 + (point.Y - y) ** 2)
 
-    def compare_results(self, set_point_type: PointTypes, got_point_type: PointTypes) -> None:
-        if set_point_type == got_point_type:
-            self.guessed_num_of_points += 1
+        self.current_values.sort(key = lambda point : point.distance)
 
-        self.total_num_of_points += 1
+        return Misc.get_point_type(self.current_values[: neighbors])
 
     def generate_coords(self, point_type: PointTypes) -> tuple[int, int]:
         X, Y = 0, 0
@@ -84,27 +88,36 @@ class Classification:
         while True:
             X, Y = Misc.get_random_coords(point_type)
 
-            if self.map[Y][X] == None:
+            if not self.map[Y][X]:
                 break
         return (X, Y)
 
-    def generate_graph_data(self) -> None:
-        for point in self.recorded_values:
-            X, Y = point.get_coords()
+    def generate_graph_data(self, neighbor: int, time: float) -> None:
+        for point in self.current_values: 
+            X, Y = point.X, point.Y
 
             X -= 5000
             Y -= 5000
 
             match point.type:
                 case PointTypes.RED:
-                    self.red_point_coords_x.append(X)
-                    self.red_point_coords_y.append(Y)
+                    self.point_coords[labels.RED_X].append(X)
+                    self.point_coords[labels.RED_Y].append(Y)
                 case PointTypes.GREEN:
-                    self.green_point_coords_x.append(X)
-                    self.green_point_coords_y.append(Y)
+                    self.point_coords[labels.GREEN_X].append(X)
+                    self.point_coords[labels.GREEN_Y].append(Y)
                 case PointTypes.BLUE:
-                    self.blue_point_coords_x.append(X)
-                    self.blue_point_coords_y.append(Y)
+                    self.point_coords[labels.BLUE_X].append(X)
+                    self.point_coords[labels.BLUE_Y].append(Y)
                 case _:
-                    self.purple_point_coords_x.append(X)
-                    self.purple_point_coords_y.append(Y)
+                    self.point_coords[labels.PURPLE_X].append(X)
+                    self.point_coords[labels.PURPLE_Y].append(Y)
+
+        self.output_creator.console_output(
+            self.guessed_num_of_points, 
+            self.total_num_of_points,
+            time
+        )
+        self.output_creator.initialize_graph_settings(neighbor)
+        self.output_creator.define_data(self.point_coords)
+        self.output_creator.display_graph()
